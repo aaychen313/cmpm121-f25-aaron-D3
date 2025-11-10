@@ -12,7 +12,10 @@ const controlPanelDiv = document.createElement("div");
 controlPanelDiv.id = "controlPanel";
 controlPanelDiv.innerHTML = `
   <h2>World of Bits (D3.a)</h2>
-  <p>Exploring a tiny slice of a world-wide grid.</p>
+  <p>
+    Deterministic tokens on a world-wide grid.<br>
+    Click nearby cells to pick up, place, and merge.
+  </p>
 `;
 document.body.append(controlPanelDiv);
 
@@ -60,25 +63,10 @@ leaflet
 // Layer for grid + labels
 const gridLayer = leaflet.layerGroup().addTo(map);
 
-// Player stands in the classroom cell (fixed for D3.a)
-const playerCell: CellId = latLngToCell(
-  CLASSROOM_LATLNG.lat,
-  CLASSROOM_LATLNG.lng,
-);
-
-// Player marker
-const playerMarker = leaflet.circleMarker(CLASSROOM_LATLNG, {
-  radius: 6,
-  weight: 2,
-  color: "#ffcc00",
-  fillColor: "#ffcc00",
-  fillOpacity: 1,
-}).addTo(map);
-
 // Helpers
-//function cellKey(cell: CellId): string {
-//  return `${cell.i},${cell.j}`;
-//}
+function cellKey(cell: CellId): string {
+  return `${cell.i},${cell.j}`;
+}
 
 function latLngToCell(lat: number, lng: number): CellId {
   return {
@@ -112,6 +100,98 @@ function baseTokenForCell(cell: CellId): TokenValue {
   return 8;
 }
 
+// Player
+const playerCell: CellId = latLngToCell(
+  CLASSROOM_LATLNG.lat,
+  CLASSROOM_LATLNG.lng,
+);
+
+// Player marker
+const playerMarker = leaflet.circleMarker(CLASSROOM_LATLNG, {
+  radius: 6,
+  weight: 2,
+  color: "#ffcc00",
+  fillColor: "#ffcc00",
+  fillOpacity: 1,
+}).addTo(map);
+
+// Game State
+
+// Cells that the player has changed this session
+const modifiedCells = new Map<string, TokenValue>();
+
+// One held token at a time
+let heldToken: TokenValue = null;
+
+// Read token for a cell (modified -> stored; otherwise base)
+function getCellToken(cell: CellId): TokenValue {
+  const key = cellKey(cell);
+  if (modifiedCells.has(key)) {
+    return modifiedCells.get(key)!;
+  }
+  return baseTokenForCell(cell);
+}
+
+// Write token for a cell into modified set
+function setCellToken(cell: CellId, value: TokenValue): void {
+  modifiedCells.set(cellKey(cell), value);
+}
+
+// Simple HUD updater
+function updateStatus(message: string): void {
+  const held = heldToken === null ? "None" : heldToken.toString();
+  statusPanelDiv.innerHTML = `
+    <div><strong>Held token:</strong> ${held}</div>
+    <div>${message}</div>
+  `;
+}
+
+// Handle clicks on a specific cell
+function handleCellClick(cell: CellId): void {
+  const dist = cellDistance(playerCell, cell);
+  if (dist > INTERACTION_RADIUS_CELLS) {
+    updateStatus("Too far away to interact with that cell.");
+    return;
+  }
+
+  const cellValue = getCellToken(cell);
+
+  // Case 1: hand empty → attempt pickup
+  if (heldToken === null) {
+    if (cellValue === null) {
+      updateStatus("Nothing here to pick up.");
+      return;
+    }
+    heldToken = cellValue;
+    setCellToken(cell, null);
+    updateStatus(`Picked up ${heldToken}.`);
+    redrawGrid();
+    return;
+  }
+
+  // Case 2: holding token, target empty → place
+  if (cellValue === null) {
+    setCellToken(cell, heldToken);
+    updateStatus(`Placed ${heldToken}.`);
+    heldToken = null;
+    redrawGrid();
+    return;
+  }
+
+  // Case 3: holding token, same value → merge
+  if (cellValue === heldToken) {
+    const newValue = cellValue * 2;
+    setCellToken(cell, newValue);
+    heldToken = null;
+    updateStatus(`Merged into ${newValue}.`);
+    redrawGrid();
+    return;
+  }
+
+  // Case 4: holding token, different value → no action
+  updateStatus("Cell has a different token; no merge possible.");
+}
+
 // Render grid
 function redrawGrid(): void {
   gridLayer.clearLayers();
@@ -141,6 +221,9 @@ function redrawGrid(): void {
 
       rect.addTo(gridLayer);
 
+      // Make cells clickable for interactions
+      rect.on("click", () => handleCellClick(cell));
+
       if (token !== null) {
         const center = (rect.getBounds() as leaflet.LatLngBounds).getCenter();
         const icon = leaflet.divIcon({
@@ -161,8 +244,7 @@ function redrawGrid(): void {
 }
 
 map.whenReady(() => {
-  statusPanelDiv.textContent =
-    "Nearby cells are highlighted. Next: make them interactive for D3.a.";
+  updateStatus("Click a nearby numbered cell to pick up a token.");
   redrawGrid();
 });
 

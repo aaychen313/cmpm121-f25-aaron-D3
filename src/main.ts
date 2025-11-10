@@ -142,8 +142,7 @@ function setCellToken(cell: CellId, value: TokenValue): void {
 
 // HUD + Win Check
 
-// Simple HUD updater
-function updateStatus(message: string): void {
+function renderHUD(message: string): void {
   const held = heldToken === null ? "None" : heldToken.toString();
   statusPanelDiv.innerHTML = `
     <div><strong>Held token:</strong> ${held}</div>
@@ -159,6 +158,18 @@ function checkWinFrom(source: "hand" | "cell", value: number): void {
     updateStatus(`${prefix} ${value}! D3.a goal reached 🎉`);
   }
 }
+
+// Simple HUD updater
+function updateStatus(message: string): void {
+  const held = heldToken === null ? "None" : heldToken.toString();
+  statusPanelDiv.innerHTML = `
+    <div><strong>Held token:</strong> ${held}</div>
+    <div><strong>Goal:</strong> ${GOAL_VALUE}</div>
+    <div>${message}</div>
+  `;
+}
+
+
 
 // Interaction
 function handleCellClick(cell: CellId): void {
@@ -245,8 +256,6 @@ function redrawGrid(): void {
       });
 
       rect.addTo(gridLayer);
-
-      // Make cells clickable for interactions
       rect.on("click", () => handleCellClick(cell));
 
       if (value !== null) {
@@ -268,6 +277,7 @@ function redrawGrid(): void {
   playerMarker.addTo(gridLayer);
 }
 
+// Init
 map.whenReady(() => {
   updateStatus("Click a nearby numbered cell to pick up a token.");
   redrawGrid();

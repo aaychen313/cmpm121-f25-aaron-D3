@@ -155,7 +155,7 @@ function renderHUD(message: string): void {
 function checkWinFrom(source: "hand" | "cell", value: number): void {
   if (value >= GOAL_VALUE) {
     const prefix = source === "hand" ? "You forged" : "You merged into";
-    updateStatus(`${prefix} ${value}! D3.a goal reached 🎉`);
+    renderHUD(`${prefix} ${value}! D3.a goal reached 🎉`);
   }
 }
 
@@ -168,8 +168,6 @@ function updateStatus(message: string): void {
     <div>${message}</div>
   `;
 }
-
-
 
 // Interaction
 function handleCellClick(cell: CellId): void {

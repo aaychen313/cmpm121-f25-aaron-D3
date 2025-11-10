@@ -8,7 +8,6 @@ import "./_leafletWorkaround.ts";
 import luck from "./_luck.ts";
 
 // Layout
-
 const controlPanelDiv = document.createElement("div");
 controlPanelDiv.id = "controlPanel";
 controlPanelDiv.innerHTML = `
@@ -25,8 +24,6 @@ const statusPanelDiv = document.createElement("div");
 statusPanelDiv.id = "statusPanel";
 document.body.append(statusPanelDiv);
 
-// Map setup
-
 // Classroom location (fixed)
 const CLASSROOM_LATLNG = leaflet.latLng(
   36.997936938057016,
@@ -37,6 +34,8 @@ const GAMEPLAY_ZOOM_LEVEL = 19;
 
 // Cell size (degrees). World grid anchored at (0,0).
 const TILE_DEGREES = 1e-4;
+
+const INTERACTION_RADIUS_CELLS = 3;
 
 type CellId = { i: number; j: number };
 type TokenValue = number | null;
@@ -61,10 +60,25 @@ leaflet
 // Layer for grid + labels
 const gridLayer = leaflet.layerGroup().addTo(map);
 
+// Player stands in the classroom cell (fixed for D3.a)
+const playerCell: CellId = latLngToCell(
+  CLASSROOM_LATLNG.lat,
+  CLASSROOM_LATLNG.lng,
+);
+
+// Player marker
+const playerMarker = leaflet.circleMarker(CLASSROOM_LATLNG, {
+  radius: 6,
+  weight: 2,
+  color: "#ffcc00",
+  fillColor: "#ffcc00",
+  fillOpacity: 1,
+}).addTo(map);
+
 // Helpers
-function cellKey(cell: CellId): string {
-  return `${cell.i},${cell.j}`;
-}
+//function cellKey(cell: CellId): string {
+//  return `${cell.i},${cell.j}`;
+//}
 
 function latLngToCell(lat: number, lng: number): CellId {
   return {
@@ -84,6 +98,10 @@ function cellToBounds(cell: CellId): leaflet.LatLngBoundsExpression {
   ];
 }
 
+function cellDistance(a: CellId, b: CellId): number {
+  return Math.max(Math.abs(a.i - b.i), Math.abs(a.j - b.j));
+}
+
 // Deterministic base token using luck()
 function baseTokenForCell(cell: CellId): TokenValue {
   const r = luck(`${cell.i},${cell.j},token`);
@@ -94,10 +112,7 @@ function baseTokenForCell(cell: CellId): TokenValue {
   return 8;
 }
 
-// ===============
 // Render grid
-// ===============
-
 function redrawGrid(): void {
   gridLayer.clearLayers();
 
@@ -114,11 +129,16 @@ function redrawGrid(): void {
     for (let j = jMin; j <= jMax; j++) {
       const cell: CellId = { i, j };
       const token = baseTokenForCell(cell);
+
+      const dist = cellDistance(playerCell, cell);
+      const near = dist <= INTERACTION_RADIUS_CELLS;
+
       const rect = leaflet.rectangle(cellToBounds(cell), {
         weight: 0.5,
-        color: "#888888",
+        color: near ? "#00ffff" : "#888888",
         fillOpacity: token !== null ? 0.18 : 0.02,
       });
+
       rect.addTo(gridLayer);
 
       if (token !== null) {
@@ -136,10 +156,13 @@ function redrawGrid(): void {
       }
     }
   }
+  // Keep player marker on top
+  playerMarker.addTo(gridLayer);
 }
 
 map.whenReady(() => {
-  statusPanelDiv.textContent = "Deterministic grid ready.";
+  statusPanelDiv.textContent =
+    "Nearby cells are highlighted. Next: make them interactive for D3.a.";
   redrawGrid();
 });
 

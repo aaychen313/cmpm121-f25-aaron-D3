@@ -40,6 +40,9 @@ const TILE_DEGREES = 1e-4;
 
 const INTERACTION_RADIUS_CELLS = 3;
 
+// Target value to "win" D3.a
+const GOAL_VALUE = 16;
+
 type CellId = { i: number; j: number };
 type TokenValue = number | null;
 
@@ -137,16 +140,27 @@ function setCellToken(cell: CellId, value: TokenValue): void {
   modifiedCells.set(cellKey(cell), value);
 }
 
+// HUD + Win Check
+
 // Simple HUD updater
 function updateStatus(message: string): void {
   const held = heldToken === null ? "None" : heldToken.toString();
   statusPanelDiv.innerHTML = `
     <div><strong>Held token:</strong> ${held}</div>
+    <div><strong>Goal:</strong> ${GOAL_VALUE}</div>
     <div>${message}</div>
   `;
 }
 
-// Handle clicks on a specific cell
+// Check if a value meets the goal and, if so, announce win
+function checkWinFrom(source: "hand" | "cell", value: number): void {
+  if (value >= GOAL_VALUE) {
+    const prefix = source === "hand" ? "You forged" : "You merged into";
+    updateStatus(`${prefix} ${value}! D3.a goal reached 🎉`);
+  }
+}
+
+// Interaction
 function handleCellClick(cell: CellId): void {
   const dist = cellDistance(playerCell, cell);
   if (dist > INTERACTION_RADIUS_CELLS) {
@@ -166,6 +180,11 @@ function handleCellClick(cell: CellId): void {
     setCellToken(cell, null);
     updateStatus(`Picked up ${heldToken}.`);
     redrawGrid();
+
+    if (heldToken !== null) {
+      checkWinFrom("hand", heldToken);
+    }
+
     return;
   }
 
@@ -183,7 +202,13 @@ function handleCellClick(cell: CellId): void {
     const newValue = cellValue * 2;
     setCellToken(cell, newValue);
     heldToken = null;
-    updateStatus(`Merged into ${newValue}.`);
+
+    if (newValue >= GOAL_VALUE) {
+      updateStatus(`Merged into ${newValue}! D3.a goal reached 🎉`);
+    } else {
+      updateStatus(`Merged into ${newValue}.`);
+    }
+
     redrawGrid();
     return;
   }
@@ -208,7 +233,7 @@ function redrawGrid(): void {
   for (let i = iMin; i <= iMax; i++) {
     for (let j = jMin; j <= jMax; j++) {
       const cell: CellId = { i, j };
-      const token = baseTokenForCell(cell);
+      const value = getCellToken(cell);
 
       const dist = cellDistance(playerCell, cell);
       const near = dist <= INTERACTION_RADIUS_CELLS;
@@ -216,7 +241,7 @@ function redrawGrid(): void {
       const rect = leaflet.rectangle(cellToBounds(cell), {
         weight: 0.5,
         color: near ? "#00ffff" : "#888888",
-        fillOpacity: token !== null ? 0.18 : 0.02,
+        fillOpacity: value !== null ? 0.18 : 0.02,
       });
 
       rect.addTo(gridLayer);
@@ -224,16 +249,16 @@ function redrawGrid(): void {
       // Make cells clickable for interactions
       rect.on("click", () => handleCellClick(cell));
 
-      if (token !== null) {
+      if (value !== null) {
         const center = (rect.getBounds() as leaflet.LatLngBounds).getCenter();
         const icon = leaflet.divIcon({
           className: "token-label",
           html: `<div style="
               font-size:10px;
               font-weight:bold;
-              color:#ffffff;
+              color:${near ? "#00ffff" : "#ffffff"};
               text-shadow:0 0 3px #000;
-            ">${token}</div>`,
+            ">${value}</div>`,
         });
         leaflet.marker(center, { icon }).addTo(gridLayer);
       }

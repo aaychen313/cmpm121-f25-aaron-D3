@@ -5,7 +5,7 @@ import "leaflet/dist/leaflet.css";
 import "./style.css";
 
 import "./_leafletWorkaround.ts";
-
+import luck from "./_luck.ts";
 
 // Layout
 
@@ -23,9 +23,7 @@ document.body.append(mapDiv);
 
 const statusPanelDiv = document.createElement("div");
 statusPanelDiv.id = "statusPanel";
-statusPanelDiv.textContent = "Initializing map...";
 document.body.append(statusPanelDiv);
-
 
 // Map setup
 
@@ -37,6 +35,13 @@ const CLASSROOM_LATLNG = leaflet.latLng(
 
 const GAMEPLAY_ZOOM_LEVEL = 19;
 
+// Cell size (degrees). World grid anchored at (0,0).
+const TILE_DEGREES = 1e-4;
+
+type CellId = { i: number; j: number };
+type TokenValue = number | null;
+
+// Map setup
 const map = leaflet.map(mapDiv, {
   center: CLASSROOM_LATLNG,
   zoom: GAMEPLAY_ZOOM_LEVEL,
@@ -53,4 +58,89 @@ leaflet
   })
   .addTo(map);
 
-statusPanelDiv.textContent = "Map ready. D3.a scaffolding in place.";
+// Layer for grid + labels
+const gridLayer = leaflet.layerGroup().addTo(map);
+
+// Helpers
+function cellKey(cell: CellId): string {
+  return `${cell.i},${cell.j}`;
+}
+
+function latLngToCell(lat: number, lng: number): CellId {
+  return {
+    i: Math.floor(lat / TILE_DEGREES),
+    j: Math.floor(lng / TILE_DEGREES),
+  };
+}
+
+function cellToBounds(cell: CellId): leaflet.LatLngBoundsExpression {
+  const latMin = cell.i * TILE_DEGREES;
+  const latMax = (cell.i + 1) * TILE_DEGREES;
+  const lngMin = cell.j * TILE_DEGREES;
+  const lngMax = (cell.j + 1) * TILE_DEGREES;
+  return [
+    [latMin, lngMin],
+    [latMax, lngMax],
+  ];
+}
+
+// Deterministic base token using luck()
+function baseTokenForCell(cell: CellId): TokenValue {
+  const r = luck(`${cell.i},${cell.j},token`);
+
+  if (r < 0.55) return null;
+  if (r < 0.85) return 2;
+  if (r < 0.97) return 4;
+  return 8;
+}
+
+// ===============
+// Render grid
+// ===============
+
+function redrawGrid(): void {
+  gridLayer.clearLayers();
+
+  const bounds = map.getBounds();
+  const sw = bounds.getSouthWest();
+  const ne = bounds.getNorthEast();
+
+  const iMin = Math.floor(sw.lat / TILE_DEGREES) - 1;
+  const iMax = Math.floor(ne.lat / TILE_DEGREES) + 1;
+  const jMin = Math.floor(sw.lng / TILE_DEGREES) - 1;
+  const jMax = Math.floor(ne.lng / TILE_DEGREES) + 1;
+
+  for (let i = iMin; i <= iMax; i++) {
+    for (let j = jMin; j <= jMax; j++) {
+      const cell: CellId = { i, j };
+      const token = baseTokenForCell(cell);
+      const rect = leaflet.rectangle(cellToBounds(cell), {
+        weight: 0.5,
+        color: "#888888",
+        fillOpacity: token !== null ? 0.18 : 0.02,
+      });
+      rect.addTo(gridLayer);
+
+      if (token !== null) {
+        const center = (rect.getBounds() as leaflet.LatLngBounds).getCenter();
+        const icon = leaflet.divIcon({
+          className: "token-label",
+          html: `<div style="
+              font-size:10px;
+              font-weight:bold;
+              color:#ffffff;
+              text-shadow:0 0 3px #000;
+            ">${token}</div>`,
+        });
+        leaflet.marker(center, { icon }).addTo(gridLayer);
+      }
+    }
+  }
+}
+
+map.whenReady(() => {
+  statusPanelDiv.textContent = "Deterministic grid ready.";
+  redrawGrid();
+});
+
+map.on("moveend", redrawGrid);

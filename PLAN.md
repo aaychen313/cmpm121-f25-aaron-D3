@@ -14,8 +14,9 @@ A world-anchored grid over Earth where you move by cells, collect and merge toke
 
 ## D3.a: Core mechanics (token collection and crafting)
 
-**Status:** complete  
+**Status:** complete\
 **What works**
+
 - Fixed player at classroom cell; grid rendered across the viewport.
 - Deterministic cell tokens via `luck(cellKey)`.
 - One held token; proximity interaction (Chebyshev radius).

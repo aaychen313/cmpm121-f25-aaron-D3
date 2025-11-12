@@ -1,3 +1,4 @@
 # CMPM 121 D3 Project
 
-This is the starting point for your CMPM 121 D3 project. Students should make sure to remove _this_ content from their README.md file and replace it with their own project documentation.
+A world-anchored, deterministic grid over Earth rendered in Leaflet.\
+Move one cell at a time with **W/A/S/D**, pick up tokens, place them, and **merge equal values to double** (Threes/2048-style). Your goal value scales by milestone.

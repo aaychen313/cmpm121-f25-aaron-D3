@@ -7,7 +7,9 @@ import "./style.css";
 import "./_leafletWorkaround.ts";
 import luck from "./_luck.ts";
 
+// ==============================
 // Layout
+// ==============================
 const controlPanelDiv = document.createElement("div");
 controlPanelDiv.id = "controlPanel";
 controlPanelDiv.innerHTML = `
@@ -27,6 +29,10 @@ const statusPanelDiv = document.createElement("div");
 statusPanelDiv.id = "statusPanel";
 document.body.append(statusPanelDiv);
 
+// ==============================
+// Config and types
+// ==============================
+
 // Classroom location (fixed)
 const CLASSROOM_LATLNG = leaflet.latLng(
   36.997936938057016,
@@ -34,19 +40,18 @@ const CLASSROOM_LATLNG = leaflet.latLng(
 );
 
 const GAMEPLAY_ZOOM_LEVEL = 19;
-
 // Cell size (degrees). World grid anchored at (0,0).
 const TILE_DEGREES = 1e-4;
-
 const INTERACTION_RADIUS_CELLS = 3;
-
 // Target value to "win" D3.a
 const GOAL_VALUE = 16;
 
 type CellId = { i: number; j: number };
 type TokenValue = number | null;
 
+// ==============================
 // Map setup
+// ==============================
 const map = leaflet.map(mapDiv, {
   center: CLASSROOM_LATLNG,
   zoom: GAMEPLAY_ZOOM_LEVEL,
@@ -66,7 +71,9 @@ leaflet
 // Layer for grid + labels
 const gridLayer = leaflet.layerGroup().addTo(map);
 
+// ==============================
 // Helpers
+// ==============================
 function cellKey(cell: CellId): string {
   return `${cell.i},${cell.j}`;
 }
@@ -76,6 +83,12 @@ function latLngToCell(lat: number, lng: number): CellId {
     i: Math.floor(lat / TILE_DEGREES),
     j: Math.floor(lng / TILE_DEGREES),
   };
+}
+
+function cellCenterLatLng(cell: CellId): leaflet.LatLng {
+  const latMin = cell.i * TILE_DEGREES;
+  const lngMin = cell.j * TILE_DEGREES;
+  return leaflet.latLng(latMin + TILE_DEGREES / 2, lngMin + TILE_DEGREES / 2);
 }
 
 function cellToBounds(cell: CellId): leaflet.LatLngBoundsExpression {
@@ -103,14 +116,16 @@ function baseTokenForCell(cell: CellId): TokenValue {
   return 8;
 }
 
+// ==============================
 // Player
+// ==============================
 const playerCell: CellId = latLngToCell(
   CLASSROOM_LATLNG.lat,
   CLASSROOM_LATLNG.lng,
 );
 
 // Player marker
-const playerMarker = leaflet.circleMarker(CLASSROOM_LATLNG, {
+const playerMarker = leaflet.circleMarker(cellCenterLatLng(playerCell), {
   radius: 6,
   weight: 2,
   color: "#ffcc00",
@@ -118,11 +133,18 @@ const playerMarker = leaflet.circleMarker(CLASSROOM_LATLNG, {
   fillOpacity: 1,
 }).addTo(map);
 
+function recenterOnPlayer(): void {
+  const center = cellCenterLatLng(playerCell);
+  map.panTo(center, { animate: true });
+  playerMarker.setLatLng(center);
+}
+
+// ==============================
 // Game State
+// ==============================
 
 // Cells that the player has changed this session
 const modifiedCells = new Map<string, TokenValue>();
-
 // One held token at a time
 let heldToken: TokenValue = null;
 
@@ -140,8 +162,9 @@ function setCellToken(cell: CellId, value: TokenValue): void {
   modifiedCells.set(cellKey(cell), value);
 }
 
+// ==============================
 // HUD + Win Check
-
+// ==============================
 function renderHUD(message: string): void {
   const held = heldToken === null ? "None" : heldToken.toString();
   statusPanelDiv.innerHTML = `
@@ -149,6 +172,11 @@ function renderHUD(message: string): void {
     <div><strong>Goal:</strong> ${GOAL_VALUE}</div>
     <div>${message}</div>
   `;
+}
+
+// Simple HUD updater
+function updateStatus(message: string): void {
+  renderHUD(message);
 }
 
 // Check if a value meets the goal and, if so, announce win
@@ -159,17 +187,9 @@ function checkWinFrom(source: "hand" | "cell", value: number): void {
   }
 }
 
-// Simple HUD updater
-function updateStatus(message: string): void {
-  const held = heldToken === null ? "None" : heldToken.toString();
-  statusPanelDiv.innerHTML = `
-    <div><strong>Held token:</strong> ${held}</div>
-    <div><strong>Goal:</strong> ${GOAL_VALUE}</div>
-    <div>${message}</div>
-  `;
-}
-
+// ==============================
 // Interaction
+// ==============================
 function handleCellClick(cell: CellId): void {
   const dist = cellDistance(playerCell, cell);
   if (dist > INTERACTION_RADIUS_CELLS) {
@@ -189,11 +209,9 @@ function handleCellClick(cell: CellId): void {
     setCellToken(cell, null);
     updateStatus(`Picked up ${heldToken}.`);
     redrawGrid();
-
     if (heldToken !== null) {
       checkWinFrom("hand", heldToken);
     }
-
     return;
   }
 
@@ -211,13 +229,11 @@ function handleCellClick(cell: CellId): void {
     const newValue = cellValue * 2;
     setCellToken(cell, newValue);
     heldToken = null;
-
     if (newValue >= GOAL_VALUE) {
       updateStatus(`Merged into ${newValue}! D3.a goal reached 🎉`);
     } else {
       updateStatus(`Merged into ${newValue}.`);
     }
-
     redrawGrid();
     return;
   }
@@ -226,7 +242,9 @@ function handleCellClick(cell: CellId): void {
   updateStatus("Cell has a different token; no merge possible.");
 }
 
-// Render grid
+// ==============================
+// Rendering
+// ==============================
 function redrawGrid(): void {
   gridLayer.clearLayers();
 
@@ -273,10 +291,12 @@ function redrawGrid(): void {
   }
   // Keep player marker on top
   playerMarker.addTo(gridLayer);
+  playerMarker.setLatLng(cellCenterLatLng(playerCell));
 }
 
 // Init
 map.whenReady(() => {
+  recenterOnPlayer();
   updateStatus("Click a nearby numbered cell to pick up a token.");
   redrawGrid();
 });

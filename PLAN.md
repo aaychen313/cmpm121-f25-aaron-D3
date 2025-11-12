@@ -1,8 +1,8 @@
-# D3: {game title goes here}
+# D3: World of Bits
 
 # Game Design Vision
 
-{a few-sentence description of the game mechanics}
+A world-anchored grid over Earth where you move by cells, collect and merge tokens to reach the value of 16. Deterministic token spawns so the world is reproducible.
 
 # Technologies
 
@@ -14,11 +14,21 @@
 
 ## D3.a: Core mechanics (token collection and crafting)
 
-## D3.a Goals
+**Status:** complete  
+**What works**
+- Fixed player at classroom cell; grid rendered across the viewport.
+- Deterministic cell tokens via `luck(cellKey)`.
+- One held token; proximity interaction (Chebyshev radius).
+- Click to pick up / place / merge equal → double.
+- HUD shows held token; win at 16 (reached via merge or pickup).
+- No changes to `index.html`, `_leafletWorkaround.ts`, `_luck.ts`.
 
-- Leaflet map at classroom location.
-- Deterministic cell tokens using `luck`.
-- Only nearby cells interactable.
-- Single held token.
-- Merge equal tokens → double.
-- Show held token + win condition.
+## D3.b — Globe-Spanning Gameplay
+
+movement + world consistency. Player moves one **cell** per step with **W / A / S / D**. Map recenters on the player each move.
+
+**Step plan**
+
+- add Cell center + recenter
+- add WASD movement
+- Show current `playerCell (i,j)` alongside held token and goal.

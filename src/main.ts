@@ -119,7 +119,7 @@ function baseTokenForCell(cell: CellId): TokenValue {
 // ==============================
 // Player
 // ==============================
-const playerCell: CellId = latLngToCell(
+let playerCell: CellId = latLngToCell(
   CLASSROOM_LATLNG.lat,
   CLASSROOM_LATLNG.lng,
 );
@@ -138,6 +138,34 @@ function recenterOnPlayer(): void {
   map.panTo(center, { animate: true });
   playerMarker.setLatLng(center);
 }
+
+// ==============================
+// Movement (W A S D)
+// ==============================
+
+function movePlayer(di: number, dj: number): void {
+  playerCell = { i: playerCell.i + di, j: playerCell.j + dj };
+  recenterOnPlayer();
+  redrawGrid();
+  updateStatus(`Moved to (${playerCell.i}, ${playerCell.j}).`);
+}
+
+addEventListener("keydown", (e: KeyboardEvent) => {
+  const key = e.key.toLowerCase();
+  if (key === "w") {
+    e.preventDefault();
+    movePlayer(1, 0);
+  } else if (key === "s") {
+    e.preventDefault();
+    movePlayer(-1, 0);
+  } else if (key === "a") {
+    e.preventDefault();
+    movePlayer(0, -1);
+  } else if (key === "d") {
+    e.preventDefault();
+    movePlayer(0, 1);
+  }
+});
 
 // ==============================
 // Game State

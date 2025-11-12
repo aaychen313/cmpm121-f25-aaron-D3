@@ -195,9 +195,11 @@ function setCellToken(cell: CellId, value: TokenValue): void {
 // ==============================
 function renderHUD(message: string): void {
   const held = heldToken === null ? "None" : heldToken.toString();
+  const pos = `(${playerCell.i}, ${playerCell.j})`;
   statusPanelDiv.innerHTML = `
     <div><strong>Held token:</strong> ${held}</div>
     <div><strong>Goal:</strong> ${GOAL_VALUE}</div>
+    <div><strong>Player cell:</strong> ${pos}</div>
     <div>${message}</div>
   `;
 }

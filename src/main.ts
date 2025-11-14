@@ -155,6 +155,7 @@ function getCellToken(cell: CellId): TokenValue {
 // Write token for a cell into modified set
 function setCellToken(cell: CellId, value: TokenValue): void {
   modifiedCells.set(cellKey(cell), value);
+  scheduleAutosave();
 }
 
 // ==============================
@@ -165,7 +166,7 @@ function renderHUD(message: string): void {
   const pos = `(${playerCell.i}, ${playerCell.j})`;
   statusPanelDiv.innerHTML = `
     <div><strong>Held token:</strong> ${held}</div>
-    <div><strong>Goal:</strong> ${GOAL_VALUE}</div>
+    <div><strong>Goal:</strong> ${goalValue}</div>
     <div><strong>Player cell:</strong> ${pos}</div>
     <div>${message}</div>
   `;
@@ -178,7 +179,7 @@ function updateStatus(message: string): void {
 
 // Check if a value meets the goal and, if so, announce win
 function checkWinFrom(source: "hand" | "cell", value: number): void {
-  if (value >= GOAL_VALUE) {
+  if (value >= goalValue) {
     const prefix = source === "hand" ? "You forged" : "You merged into";
     renderHUD(`${prefix} ${value}! D3.a goal reached 🎉`);
   }
@@ -235,29 +236,42 @@ function applySaveBlob(s: SaveBlob): void {
   }
 }
 
-function saveNow(): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSaveBlob()));
-    updateStatus("Game saved.");
-  } catch {
-    updateStatus("Save failed.");
-  }
-}
+//function saveNow(): void {
+//  try {
+//    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSaveBlob()));
+//    updateStatus("Game saved.");
+//  } catch {
+//    updateStatus("Save failed.");
+//  }
+//}
 
-function loadNow(): void {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      updateStatus("No saved game found.");
-      return;
-    }
-    applySaveBlob(JSON.parse(raw) as SaveBlob);
-    recenterOnPlayer();
-    redrawGrid();
-    updateStatus("Loaded saved game.");
-  } catch {
-    updateStatus("Load failed.");
-  }
+//function loadNow(): void {
+//  try {
+//    const raw = localStorage.getItem(STORAGE_KEY);
+//   if (!raw) {
+//      updateStatus("No saved game found.");
+//      return;
+//    }
+//    applySaveBlob(JSON.parse(raw) as SaveBlob);
+//    recenterOnPlayer();
+//    redrawGrid();
+//    updateStatus("Loaded saved game.");
+//  } catch {
+//    updateStatus("Load failed.");
+//  }
+//}
+
+// Throttled autosave (avoid spamming writes to localStorage)
+let autosaveTimer: number | null = null;
+function scheduleAutosave(): void {
+  if (autosaveTimer !== null) return;
+  autosaveTimer = setTimeout(() => {
+    autosaveTimer = null;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSaveBlob()));
+      // silent autosave; no HUD spam
+    } catch { /* ignore */ }
+  }, 400) as unknown as number;
 }
 
 // ==============================
@@ -285,6 +299,7 @@ function handleCellClick(cell: CellId): void {
     if (heldToken !== null) {
       checkWinFrom("hand", heldToken);
     }
+    scheduleAutosave();
     return;
   }
 
@@ -294,6 +309,7 @@ function handleCellClick(cell: CellId): void {
     updateStatus(`Placed ${heldToken}.`);
     heldToken = null;
     redrawGrid();
+    scheduleAutosave();
     return;
   }
 
@@ -302,12 +318,13 @@ function handleCellClick(cell: CellId): void {
     const newValue = cellValue * 2;
     setCellToken(cell, newValue);
     heldToken = null;
-    if (newValue >= GOAL_VALUE) {
+    if (newValue >= goalValue) {
       renderHUD(`Merged into ${newValue}! D3.a goal reached 🎉`);
     } else {
       updateStatus(`Merged into ${newValue}.`);
     }
     redrawGrid();
+    scheduleAutosave();
     return;
   }
 
@@ -324,6 +341,7 @@ function movePlayer(di: number, dj: number): void {
   recenterOnPlayer();
   redrawGrid();
   updateStatus(`Moved to (${playerCell.i}, ${playerCell.j}).`);
+  scheduleAutosave();
 }
 
 addEventListener("keydown", (e: KeyboardEvent) => {

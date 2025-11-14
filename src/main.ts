@@ -44,7 +44,7 @@ const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
 const INTERACTION_RADIUS_CELLS = 3;
 // Target value to "win" D3.a
-const GOAL_VALUE = 16;
+const GOAL_VALUE = 32;
 
 type CellId = { i: number; j: number };
 type TokenValue = number | null;
@@ -117,12 +117,16 @@ function baseTokenForCell(cell: CellId): TokenValue {
 }
 
 // ==============================
-// Player
+// State (in-memory)
 // ==============================
 let playerCell: CellId = latLngToCell(
   CLASSROOM_LATLNG.lat,
   CLASSROOM_LATLNG.lng,
 );
+
+let heldToken: TokenValue = null;
+let goalValue = GOAL_VALUE; // One held token at a time
+const modifiedCells = new Map<string, TokenValue>(); // Cells that the player has changed this session
 
 // Player marker
 const playerMarker = leaflet.circleMarker(cellCenterLatLng(playerCell), {
@@ -138,43 +142,6 @@ function recenterOnPlayer(): void {
   map.panTo(center, { animate: true });
   playerMarker.setLatLng(center);
 }
-
-// ==============================
-// Movement (W A S D)
-// ==============================
-
-function movePlayer(di: number, dj: number): void {
-  playerCell = { i: playerCell.i + di, j: playerCell.j + dj };
-  recenterOnPlayer();
-  redrawGrid();
-  updateStatus(`Moved to (${playerCell.i}, ${playerCell.j}).`);
-}
-
-addEventListener("keydown", (e: KeyboardEvent) => {
-  const key = e.key.toLowerCase();
-  if (key === "w") {
-    e.preventDefault();
-    movePlayer(1, 0);
-  } else if (key === "s") {
-    e.preventDefault();
-    movePlayer(-1, 0);
-  } else if (key === "a") {
-    e.preventDefault();
-    movePlayer(0, -1);
-  } else if (key === "d") {
-    e.preventDefault();
-    movePlayer(0, 1);
-  }
-});
-
-// ==============================
-// Game State
-// ==============================
-
-// Cells that the player has changed this session
-const modifiedCells = new Map<string, TokenValue>();
-// One held token at a time
-let heldToken: TokenValue = null;
 
 // Read token for a cell (modified -> stored; otherwise base)
 function getCellToken(cell: CellId): TokenValue {
@@ -214,6 +181,82 @@ function checkWinFrom(source: "hand" | "cell", value: number): void {
   if (value >= GOAL_VALUE) {
     const prefix = source === "hand" ? "You forged" : "You merged into";
     renderHUD(`${prefix} ${value}! D3.a goal reached 🎉`);
+  }
+}
+
+// ==============================
+// Persistence — minimal save/load
+// ==============================
+const STORAGE_VERSION = 1;
+const STORAGE_KEY = "world-of-bits:d3-save";
+
+type SaveCell = [number, number, number | null];
+type SaveBlob = {
+  v: number;
+  pc: [number, number];
+  ht: number | null;
+  g: number;
+  m: SaveCell[];
+};
+
+function toSaveBlob(): SaveBlob {
+  const m: SaveCell[] = [];
+  for (const [k, v] of modifiedCells) {
+    const [iStr, jStr] = k.split(",");
+    const i = Number(iStr), j = Number(jStr);
+    if (!Number.isFinite(i) || !Number.isFinite(j)) continue;
+    m.push([i, j, v === null ? null : Number(v)]);
+  }
+  return {
+    v: STORAGE_VERSION,
+    pc: [playerCell.i, playerCell.j],
+    ht: heldToken,
+    g: goalValue,
+    m,
+  };
+}
+
+function applySaveBlob(s: SaveBlob): void {
+  if (!s || typeof s !== "object" || s.v !== STORAGE_VERSION) return;
+  if (Array.isArray(s.pc) && s.pc.length === 2) {
+    const [i, j] = s.pc;
+    if (Number.isFinite(i) && Number.isFinite(j)) playerCell = { i, j };
+  }
+  heldToken = (s.ht === null || Number.isFinite(s.ht)) ? s.ht : null;
+  if (Number.isFinite(s.g)) goalValue = s.g;
+  modifiedCells.clear();
+  if (Array.isArray(s.m)) {
+    for (const t of s.m) {
+      if (!Array.isArray(t) || t.length !== 3) continue;
+      const [i, j, v] = t;
+      if (!Number.isFinite(i) || !Number.isFinite(j)) continue;
+      modifiedCells.set(`${i},${j}`, v === null ? null : Number(v));
+    }
+  }
+}
+
+function saveNow(): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSaveBlob()));
+    updateStatus("Game saved.");
+  } catch {
+    updateStatus("Save failed.");
+  }
+}
+
+function loadNow(): void {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      updateStatus("No saved game found.");
+      return;
+    }
+    applySaveBlob(JSON.parse(raw) as SaveBlob);
+    recenterOnPlayer();
+    redrawGrid();
+    updateStatus("Loaded saved game.");
+  } catch {
+    updateStatus("Load failed.");
   }
 }
 
@@ -260,7 +303,7 @@ function handleCellClick(cell: CellId): void {
     setCellToken(cell, newValue);
     heldToken = null;
     if (newValue >= GOAL_VALUE) {
-      updateStatus(`Merged into ${newValue}! D3.a goal reached 🎉`);
+      renderHUD(`Merged into ${newValue}! D3.a goal reached 🎉`);
     } else {
       updateStatus(`Merged into ${newValue}.`);
     }
@@ -271,6 +314,34 @@ function handleCellClick(cell: CellId): void {
   // Case 4: holding token, different value → no action
   updateStatus("Cell has a different token; no merge possible.");
 }
+
+// ==============================
+// Movement (W A S D)
+// ==============================
+
+function movePlayer(di: number, dj: number): void {
+  playerCell = { i: playerCell.i + di, j: playerCell.j + dj };
+  recenterOnPlayer();
+  redrawGrid();
+  updateStatus(`Moved to (${playerCell.i}, ${playerCell.j}).`);
+}
+
+addEventListener("keydown", (e: KeyboardEvent) => {
+  const key = e.key.toLowerCase();
+  if (key === "w") {
+    e.preventDefault();
+    movePlayer(+1, 0);
+  } else if (key === "s") {
+    e.preventDefault();
+    movePlayer(-1, 0);
+  } else if (key === "a") {
+    e.preventDefault();
+    movePlayer(0, -1);
+  } else if (key === "d") {
+    e.preventDefault();
+    movePlayer(0, +1);
+  }
+});
 
 // ==============================
 // Rendering
@@ -324,11 +395,17 @@ function redrawGrid(): void {
   playerMarker.setLatLng(cellCenterLatLng(playerCell));
 }
 
+// ==============================
 // Init
+// ==============================
 map.whenReady(() => {
+  // Load save if present
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) applySaveBlob(JSON.parse(raw) as SaveBlob);
+  } catch { /* ignore */ }
   recenterOnPlayer();
-  updateStatus("Click a nearby numbered cell to pick up a token.");
+  updateStatus("D3.c: persistence wired (manual save/load coming next).");
   redrawGrid();
 });
-
 map.on("moveend", redrawGrid);

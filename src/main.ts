@@ -45,6 +45,7 @@ const TILE_DEGREES = 1e-4;
 const INTERACTION_RADIUS_CELLS = 3;
 // Target value to "win" D3.a
 const GOAL_VALUE = 32;
+const MAX_CELLS_TO_STORE = 10000;
 
 type CellId = { i: number; j: number };
 type TokenValue = number | null;
@@ -203,6 +204,7 @@ type SaveBlob = {
 function toSaveBlob(): SaveBlob {
   const m: SaveCell[] = [];
   for (const [k, v] of modifiedCells) {
+    if (m.length >= MAX_CELLS_TO_STORE) break;
     const [iStr, jStr] = k.split(",");
     const i = Number(iStr), j = Number(jStr);
     if (!Number.isFinite(i) || !Number.isFinite(j)) continue;
@@ -232,10 +234,11 @@ function applySaveBlob(s: SaveBlob): void {
       const [i, j, v] = t;
       if (!Number.isFinite(i) || !Number.isFinite(j)) continue;
       modifiedCells.set(`${i},${j}`, v === null ? null : Number(v));
+      if (modifiedCells.size >= MAX_CELLS_TO_STORE) break;
     }
   }
 }
-
+// thinking about adding a save/load system
 //function saveNow(): void {
 //  try {
 //    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSaveBlob()));

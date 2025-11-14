@@ -14,9 +14,6 @@ A world-anchored grid over Earth where you move by cells, collect and merge toke
 
 ## D3.a: Core mechanics (token collection and crafting)
 
-**Status:** complete\
-**What works**
-
 - Fixed player at classroom cell; grid rendered across the viewport.
 - Deterministic cell tokens via `luck(cellKey)`.
 - One held token; proximity interaction (Chebyshev radius).
@@ -26,10 +23,14 @@ A world-anchored grid over Earth where you move by cells, collect and merge toke
 
 ## D3.b — Globe-Spanning Gameplay
 
-movement + world consistency. Player moves one **cell** per step with **W / A / S / D**. Map recenters on the player each move.
-
-**Step plan**
+movement + world consistency. Player moves one cell per step with **W / A / S / D**. Map recenters on the player each move.
 
 - add Cell center + recenter
 - add WASD movement
 - Show current `playerCell (i,j)` alongside held token and goal.
+
+### D3.c — Sparse Persistence
+
+- Persist **modified cells** only (sparse array of `[i, j, value|null]`).
+- Persist small player state: `playerCell`, `heldToken`, `goal`.
+- **Autosave (throttled)** after moves and state-changing clicks

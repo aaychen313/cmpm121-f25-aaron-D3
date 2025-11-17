@@ -14,10 +14,24 @@ const controlPanelDiv = document.createElement("div");
 controlPanelDiv.id = "controlPanel";
 controlPanelDiv.innerHTML = `
   <h2>World of Bits (D3.a)</h2>
-  <p>
-    Deterministic tokens on a world-wide grid.<br>
-    Click nearby cells to pick up, place, and merge.
-  </p>
+  <p>Move with <strong>W/A/S/D</strong> or (soon) Geolocation. Click nearby cells to interact.</p>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+    <label style="display:flex; gap:6px; align-items:center;">
+      Mode:
+      <select id="modeSelect" class="btn">
+        <option value="keyboard" selected>Keyboard</option>
+        <option value="geo">Geolocation</option>
+      </select>
+    </label>
+    <button id="btnFollow" class="btn" disabled>Follow Me: Off</button>
+    <button id="btnSnapGPS" class="btn" disabled>Snap to GPS</button>
+    <span id="geoStatus" style="font-size:12px; opacity:.8;"></span>
+  </div>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+    <button id="btnSave" class="btn">Save</button>
+    <button id="btnLoad" class="btn">Load</button>
+    <button id="btnNew"  class="btn">New Game</button>
+  </div>
 `;
 document.body.append(controlPanelDiv);
 
@@ -38,7 +52,6 @@ const CLASSROOM_LATLNG = leaflet.latLng(
   36.997936938057016,
   -122.05703507501151,
 );
-
 const GAMEPLAY_ZOOM_LEVEL = 19;
 // Cell size (degrees). World grid anchored at (0,0).
 const TILE_DEGREES = 1e-4;
@@ -49,6 +62,13 @@ const MAX_CELLS_TO_STORE = 10000;
 
 type CellId = { i: number; j: number };
 type TokenValue = number | null;
+type MovementMode = "keyboard" | "geo";
+
+// small style constants
+const COLOR_NEAR = "#00ffff";
+const COLOR_FAR = "#888888";
+const TOKEN_LABEL_CSS =
+  "font-size:10px;font-weight:bold;text-shadow:0 0 3px #000;";
 
 // ==============================
 // Map setup
@@ -110,11 +130,16 @@ function cellDistance(a: CellId, b: CellId): number {
 // Deterministic base token using luck()
 function baseTokenForCell(cell: CellId): TokenValue {
   const r = luck(`${cell.i},${cell.j},token`);
-
   if (r < 0.55) return null;
   if (r < 0.85) return 2;
   if (r < 0.97) return 4;
   return 8;
+}
+
+function clearSave(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch { /* ignore */ }
 }
 
 // ==============================
@@ -128,6 +153,15 @@ let playerCell: CellId = latLngToCell(
 let heldToken: TokenValue = null;
 let goalValue = GOAL_VALUE; // One held token at a time
 const modifiedCells = new Map<string, TokenValue>(); // Cells that the player has changed this session
+
+let movementMode: MovementMode = "keyboard"; // controller (GPS later)
+// deno-lint-ignore no-unused-vars
+let followEnabled = false; // GPS later
+
+const modeSelect = document.getElementById("modeSelect") as HTMLSelectElement;
+//const btnFollow = document.getElementById("btnFollow") as HTMLButtonElement;
+//const btnSnapGPS = document.getElementById("btnSnapGPS") as HTMLButtonElement;
+//const geoStatusSpan = document.getElementById("geoStatus") as HTMLSpanElement;
 
 // Player marker
 const playerMarker = leaflet.circleMarker(cellCenterLatLng(playerCell), {
@@ -173,7 +207,6 @@ function renderHUD(message: string): void {
   `;
 }
 
-// Simple HUD updater
 function updateStatus(message: string): void {
   renderHUD(message);
 }
@@ -187,7 +220,7 @@ function checkWinFrom(source: "hand" | "cell", value: number): void {
 }
 
 // ==============================
-// Persistence — minimal save/load
+// Persistence
 // ==============================
 const STORAGE_VERSION = 1;
 const STORAGE_KEY = "world-of-bits:d3-save";
@@ -238,31 +271,31 @@ function applySaveBlob(s: SaveBlob): void {
     }
   }
 }
-// thinking about adding a save/load system
-//function saveNow(): void {
-//  try {
-//    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSaveBlob()));
-//    updateStatus("Game saved.");
-//  } catch {
-//    updateStatus("Save failed.");
-//  }
-//}
 
-//function loadNow(): void {
-//  try {
-//    const raw = localStorage.getItem(STORAGE_KEY);
-//   if (!raw) {
-//      updateStatus("No saved game found.");
-//      return;
-//    }
-//    applySaveBlob(JSON.parse(raw) as SaveBlob);
-//    recenterOnPlayer();
-//    redrawGrid();
-//    updateStatus("Loaded saved game.");
-//  } catch {
-//    updateStatus("Load failed.");
-//  }
-//}
+function saveNow(): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSaveBlob()));
+    updateStatus("Game saved.");
+  } catch {
+    updateStatus("Save failed.");
+  }
+}
+
+function loadNow(): void {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      updateStatus("No saved game found.");
+      return;
+    }
+    applySaveBlob(JSON.parse(raw) as SaveBlob);
+    recenterOnPlayer();
+    redrawGrid();
+    updateStatus("Loaded saved game.");
+  } catch {
+    updateStatus("Load failed.");
+  }
+}
 
 // Throttled autosave (avoid spamming writes to localStorage)
 let autosaveTimer: number | null = null;
@@ -389,10 +422,9 @@ function redrawGrid(): void {
 
       const rect = leaflet.rectangle(cellToBounds(cell), {
         weight: 0.5,
-        color: near ? "#00ffff" : "#888888",
+        color: near ? COLOR_NEAR : COLOR_FAR,
         fillOpacity: value !== null ? 0.18 : 0.02,
       });
-
       rect.addTo(gridLayer);
       rect.on("click", () => handleCellClick(cell));
 
@@ -400,7 +432,7 @@ function redrawGrid(): void {
         const center = (rect.getBounds() as leaflet.LatLngBounds).getCenter();
         const icon = leaflet.divIcon({
           className: "token-label",
-          html: `<div style="
+          html: `<div style="${TOKEN_LABEL_CSS}
               font-size:10px;
               font-weight:bold;
               color:${near ? "#00ffff" : "#ffffff"};
@@ -417,8 +449,43 @@ function redrawGrid(): void {
 }
 
 // ==============================
-// Init
+// Init + Buttons
 // ==============================
+
+function newGame(): void {
+  playerCell = latLngToCell(CLASSROOM_LATLNG.lat, CLASSROOM_LATLNG.lng);
+  heldToken = null;
+  goalValue = GOAL_VALUE;
+  modifiedCells.clear();
+  movementMode = "keyboard";
+  followEnabled = false;
+  clearSave();
+  recenterOnPlayer();
+  redrawGrid();
+  updateStatus("New game started.");
+}
+
+function wireButtons(): void {
+  // Enable/disabling GPS UI for now
+  modeSelect.addEventListener("change", () => {
+    movementMode = modeSelect.value as MovementMode;
+    updateStatus(
+      movementMode === "keyboard"
+        ? "Keyboard mode selected."
+        : "Geolocation mode (coming next).",
+    );
+  });
+  document.getElementById("btnSave")?.addEventListener(
+    "click",
+    () => saveNow(),
+  );
+  document.getElementById("btnLoad")?.addEventListener(
+    "click",
+    () => loadNow(),
+  );
+  document.getElementById("btnNew")?.addEventListener("click", () => newGame());
+}
+
 map.whenReady(() => {
   // Load save if present
   try {
@@ -426,6 +493,7 @@ map.whenReady(() => {
     if (raw) applySaveBlob(JSON.parse(raw) as SaveBlob);
   } catch { /* ignore */ }
   recenterOnPlayer();
+  wireButtons();
   updateStatus("D3.c: persistence wired (manual save/load coming next).");
   redrawGrid();
 });

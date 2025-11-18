@@ -580,7 +580,8 @@ function redrawGrid(): void {
               text-shadow:0 0 3px #000;
             ">${value}</div>`,
         });
-        leaflet.marker(center, { icon }).addTo(gridLayer);
+        leaflet.marker(center, { icon, interactive: false, keyboard: false })
+          .addTo(gridLayer);
       }
     }
   }

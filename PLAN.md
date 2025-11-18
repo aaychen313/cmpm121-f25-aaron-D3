@@ -34,3 +34,11 @@ movement + world consistency. Player moves one cell per step with **W / A / S / 
 - Persist **modified cells** only (sparse array of `[i, j, value|null]`).
 - Persist small player state: `playerCell`, `heldToken`, `goal`.
 - **Autosave (throttled)** after moves and state-changing clicks
+
+### D3.d — Geolocation Controller
+
+- **Movement modes:** `keyboard` (WASD) or `geo` (GPS).
+- **Follow Me**: starts a `watchPosition` and moves when GPS crosses a cell boundary.
+- **Snap to GPS**: one-shot reposition to the current GPS fix.
+- HUD shows GPS lat/lng and accuracy when available.
+- Persist **controller mode** and **follow flag**; on boot/load, auto-resume follow if it was on.
